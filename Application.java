@@ -4,7 +4,6 @@
 
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Iterator;
 import java.util.Scanner;
 
 /* ----------------------------- Enum Data Types ---------------------------- */
@@ -21,14 +20,21 @@ enum UserType {
 // invalid command. This is a special command that is used to handle errors.
 enum CommandType {
   HELP,
+  REPORT,
   ADD_USER,
-  ADD_HOUSE,
   LIST_USERS,
-  ADD_PROPERTY,
-  REMOVE_PROPERTY,
-  SEARCH_PROPERTY,
-  VIEW_PROPERTY,
+  SEARCH_USER,
+  ADD_HOUSE,
+  REMOVE_HOUSE,
+  SEARCH_HOUSE,
+  VIEW_HOUSE,
+  OPTIONS, // Show available options to a customer.
   NOT_FOUND
+}
+
+/* ---------------------------- Global Variables ---------------------------- */
+class Variables {
+  public static int HOUSE_ID = 0;
 }
 
 /* ------------------------------ Basic Classes ----------------------------- */
@@ -101,6 +107,27 @@ class User extends Person {
     }
   }
 
+  public void addHouse(House house) {
+    houses.add(house);
+  }
+
+  public void removeHouse(int id) {
+    for (int i = 0; i < houses.size(); i++) {
+      if (houses.get(i).getId() == id) {
+        houses.remove(i);
+      }
+    }
+  }
+
+  public House getHouse(int id) {
+    for (House house : houses) {
+      if (house.getId() == id) {
+        return house;
+      }
+    }
+    return null;
+  }
+
   public Enum<UserType> getUserType() {
     return userType;
   }
@@ -108,9 +135,22 @@ class User extends Person {
   public String toString() {
     return getFullName() + " (" + userType + ")";
   }
+
+  public int getSalary() {
+    return salary;
+  }
+
+  public ArrayList<House> getHouses() {
+    return houses;
+  }
+
+  public boolean hasPurchasedHouse() {
+    return hasPurchasedHouse;
+  }
 }
 
 class House {
+  private int ID;
   private int price;
   private float area;
   private String address;
@@ -122,6 +162,7 @@ class House {
 
   public House(int price, float area, String address, int numberOfRooms, boolean hasParking,
       int yearOfConstruction, User owner) {
+    this.ID = Variables.HOUSE_ID++;
     this.price = price;
     this.area = area;
     this.address = address;
@@ -129,6 +170,10 @@ class House {
     this.hasParking = hasParking;
     this.yearOfConstruction = yearOfConstruction;
     this.owner = owner;
+  }
+
+  public int getId() {
+    return ID;
   }
 
   public int getPrice() {
@@ -173,31 +218,31 @@ class House {
     int currentYear = Calendar.getInstance().get(Calendar.YEAR);
     return currentYear - yearOfConstruction;
   }
-}
 
-class RealEstate {
-  public RealEstate() {
+  public void purchase() {
+    purchased = true;
+  }
 
+  public String toString() {
+    return "ID: " + ID + " | Price: " + price + " | Area: " + area + " | Address: " + address
+        + " | Number of rooms: " + numberOfRooms + " | Has parking: " + hasParking
+        + " | Year of construction: " + yearOfConstruction + " | Owner: " + owner + " | Age: " + age()
+        + " | Purchased: " + purchased;
   }
 }
 
 /* --------------------------- Application Classes -------------------------- */
 
+// Storage class is used to store all the data in the system.
 class Storage {
   private ArrayList<User> users;
-  private ArrayList<House> houses;
 
   public Storage() {
     users = new ArrayList<User>();
-    houses = new ArrayList<House>();
   }
 
   public void addUser(User user) {
     users.add(user);
-  }
-
-  public void addHouse(House house) {
-    houses.add(house);
   }
 
   public User getUser(String name, String lastName) {
@@ -212,44 +257,10 @@ class Storage {
   public ArrayList<User> getUsers() {
     return users;
   }
-
-  public ArrayList<House> getHouses() {
-    return houses;
-  }
-
-  public Iterator<User> getUsersIterator() {
-    return new Iterator<User>() {
-      private int currentIndex = 0;
-
-      @Override
-      public boolean hasNext() {
-        return currentIndex < users.size();
-      }
-
-      @Override
-      public User next() {
-        return users.get(currentIndex++);
-      }
-    };
-  }
-
-  public Iterator<House> getHousesIterator() {
-    return new Iterator<House>() {
-      private int currentIndex = 0;
-
-      @Override
-      public boolean hasNext() {
-        return currentIndex < houses.size();
-      }
-
-      @Override
-      public House next() {
-        return houses.get(currentIndex++);
-      }
-    };
-  }
 }
 
+// Command class is used to represent a command that the user enters.
+// It contains the command type and the arguments that the user entered.
 class Command {
   private String command;
   private CommandType commandType;
@@ -285,11 +296,9 @@ class Command {
 }
 
 class CommandDispatcher {
-  private RealEstate realEstate;
   private Storage storage;
 
-  public CommandDispatcher(RealEstate realEstate, Storage storage) {
-    this.realEstate = realEstate;
+  public CommandDispatcher(Storage storage) {
     this.storage = storage;
   }
 
@@ -307,9 +316,14 @@ class CommandDispatcher {
       case LIST_USERS:
         this.listUsers();
         break;
-      case ADD_PROPERTY:
+      case REMOVE_HOUSE:
+        this.removeHouse(command.getArguments());
         break;
-      case REMOVE_PROPERTY:
+      case OPTIONS:
+        this.options(command.getArguments());
+        break;
+      case REPORT:
+        this.report();
         break;
       default:
         System.out.println("\033[31m" + "Command not found" + "\033[0m");
@@ -320,15 +334,22 @@ class CommandDispatcher {
   private void help() {
     System.out.println("\033[32m" + "Available commands:" + "\033[0m");
     System.out.println("\033[32m" + "  help" + "\033[0m");
-    System.out.println("\033[32m" + "  add_user <name> <last name> <national ID> <phone number> <address>"
+
+    // ADD_USER <user> <user type> <name> <last name> <national ID> <phone number> <address> <!salary>
+    // ADD_HOUSE <user> <owner name> <owner last> <price> <area> <address> <number of rooms> <has parking> <year of construction>
+    // REMOVE_HOUSE <user> <owner name> <owner last> <house ID>
+    // LIST_USERS
+    // OPTIONS <name> <last name>
+
+    System.out.println(
+        "\033[32m" + "  add user <user> <user type> <name> <last name> <national ID> <phone number> <address> <!salary>"
+            + "\033[0m");
+    System.out.println("\033[32m"
+        + "  add house <user> <owner name> <owner last> <price> <area> <address> <number of rooms> <has parking> <year of construction>"
         + "\033[0m");
-    System.out.println("\033[32m" + "  add_property <price> <area> <address> <number of rooms> <has parking> "
-        + "<year of construction>" + "\033[0m");
-    System.out.println("\033[32m" + "  remove_property <address>" + "\033[0m");
-    System.out.println("\033[32m" + "  remove_user <national ID>" + "\033[0m");
-    System.out.println("\033[32m" + "  list_properties" + "\033[0m");
-    System.out.println("\033[32m" + "  list_users" + "\033[0m");
-    System.out.println("\033[32m" + "  list_properties <user ID>" + "\033[0m");
+    System.out.println("\033[32m" + "  remove house <user> <owner name> <owner last> <house ID>" + "\033[0m");
+    System.out.println("\033[32m" + "  list users" + "\033[0m");
+    System.out.println("\033[32m" + "  options <name> <last name>" + "\033[0m");
   }
 
   // ADD_USER <user> <user type> <name> <last name> <national ID> <phone number> <address> <!salary>
@@ -378,7 +399,12 @@ class CommandDispatcher {
     int yearOfConstruction = Integer.parseInt(arguments[9]);
 
     User owner = this.storage.getUser(arguments[2], arguments[3]);
-    this.storage.addHouse(new House(price, area, address, numberOfRooms, hasParking, yearOfConstruction, owner));
+    if (owner == null) {
+      System.out.println("\033[31m" + "Owner not found!" + "\033[0m");
+      return;
+    }
+
+    owner.addHouse(new House(price, area, address, numberOfRooms, hasParking, yearOfConstruction, owner));
     System.out.println("\033[32m" + "House added" + "\033[0m");
   }
 
@@ -388,15 +414,75 @@ class CommandDispatcher {
       System.out.println("\033[32m" + "  " + user.toString() + "\033[0m");
     }
   }
-}
 
+  // REMOVE_HOUSE <user> <owner name> <owner last> <house ID>
+  private void removeHouse(String[] arguments) {
+    String user = arguments[1];
+
+    // Only the "ROOT" user can remove houses.
+    if (!user.equals("ROOT")) {
+      System.out.println("\033[31m" + "This user is not allowed to remove houses" + "\033[0m");
+      return;
+    }
+
+    User owner = this.storage.getUser(arguments[2], arguments[3]);
+    if (owner == null) {
+      System.out.println("\033[31m" + "Owner not found!" + "\033[0m");
+      return;
+    }
+
+    House house = owner.getHouse(Integer.parseInt(arguments[4]));
+    if (house == null) {
+      System.out.println("\033[31m" + "House not found!" + "\033[0m");
+      return;
+    }
+
+    owner.removeHouse(house.getId());
+    System.out.println("\033[32m" + "House removed" + "\033[0m");
+  }
+
+  // OPTIONS <name> <last name>
+  private void options(String[] arguments) {
+    User user = this.storage.getUser(arguments[1], arguments[2]);
+
+    if (user == null) {
+      System.out.println("\033[31m" + "User not found!" + "\033[0m");
+      return;
+    }
+
+    if (user.getUserType() != UserType.CUSTOMER) {
+      System.out.println("\033[31m" + "This user is not a customer" + "\033[0m");
+      return;
+    }
+
+    System.out.println("\033[32m" + "Available Houses to Buy:" + "\033[0m");
+    for (User seller : storage.getUsers()) {
+      if (seller.getUserType() == UserType.SELLER) {
+        for (House house : seller.getHouses()) {
+          if (house.isPurchased() == false && house.getPrice() <= user.getSalary()) {
+            System.out.println("\033[32m" + "  " + house.toString() + "\033[0m");
+          }
+        }
+      }
+    }
+  }
+
+  private void report() {
+    System.out.println("\033[32m" + "Report:" + "\033[0m");
+    for (User user : storage.getUsers()) {
+      System.out.println("\033[32m" + "  " + user.toString() + "\033[0m");
+      for (House house : user.getHouses()) {
+        System.out.println("\033[32m" + "    " + house.toString() + "\033[0m");
+      }
+    }
+  }
+}
 /* -------------------------- Start of the program -------------------------- */
 
 public class Application {
   public static void main(String[] args) {
     Storage storage = new Storage();
-    RealEstate realEstate = new RealEstate();
-    CommandDispatcher dispatcher = new CommandDispatcher(realEstate, storage);
+    CommandDispatcher dispatcher = new CommandDispatcher(storage);
 
     User ROOT = new User("ROOT", "ROOT", "1", "1", "Address", UserType.ADMIN);
     storage.addUser(ROOT);
@@ -427,4 +513,3 @@ public class Application {
 
 // ADD_USER ROOT SELLER Farhad Uneci 3861167190 09398466645 Hamedan, Mahdie
 // ADD_HOUSE ROOT Farhad Uneci 1000000 250 Hamedan 5 false 2000
-
