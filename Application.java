@@ -4,6 +4,9 @@
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 /* ----------------------------- Enum Data Types ---------------------------- */
@@ -22,12 +25,13 @@ enum CommandType {
   HELP,
   REPORT,
   ADD_USER,
+  REMOVE_USER,
   LIST_USERS,
   SEARCH_USER,
   ADD_HOUSE,
+  PURCHASE,
   REMOVE_HOUSE,
   SEARCH_HOUSE,
-  VIEW_HOUSE,
   OPTIONS, // Show available options to a customer.
   NOT_FOUND
 }
@@ -91,18 +95,15 @@ class User extends Person {
       Enum<UserType> userType) {
     super(name, lastName, nationalID, phoneNumber, address);
     this.userType = userType;
-    if (userType == UserType.SELLER) {
-      this.houses = new ArrayList<House>();
-    }
+    this.houses = new ArrayList<House>();
   }
 
   public User(String name, String lastName, String nationalID, String phoneNumber, String address,
       Enum<UserType> userType, int salary) {
     super(name, lastName, nationalID, phoneNumber, address);
     this.userType = userType;
-    if (userType == UserType.SELLER) {
-      this.houses = new ArrayList<House>();
-    } else if (userType == UserType.CUSTOMER) {
+    this.houses = new ArrayList<House>();
+    if (userType == UserType.CUSTOMER) {
       this.salary = salary;
     }
   }
@@ -141,11 +142,15 @@ class User extends Person {
   }
 
   public ArrayList<House> getHouses() {
-    return houses;
+    return houses == null ? null : houses;
   }
 
   public boolean hasPurchasedHouse() {
     return hasPurchasedHouse;
+  }
+
+  public void setHasPurchasedHouse(boolean hasPurchasedHouse) {
+    this.hasPurchasedHouse = hasPurchasedHouse;
   }
 }
 
@@ -205,6 +210,7 @@ class House {
   }
 
   public User changeOwner(User newOwner) {
+    this.purchased = true;
     User oldOwner = owner;
     owner = newOwner;
     return oldOwner;
@@ -245,6 +251,14 @@ class Storage {
     users.add(user);
   }
 
+  public void removeUser(String id) {
+    for (int i = 0; i < users.size(); i++) {
+      if (users.get(i).getNationalID() == id) {
+        users.remove(i);
+      }
+    }
+  }
+
   public User getUser(String name, String lastName) {
     for (User user : users) {
       if (user.getName().equals(name) && user.getLastName().equals(lastName)) {
@@ -256,6 +270,78 @@ class Storage {
 
   public ArrayList<User> getUsers() {
     return users;
+  }
+
+  public List<User> searchUser(String searchKey, String searchValue) {
+    List<User> result = new ArrayList<User>();
+
+    for (User user : users) {
+      if (searchKey.equals("name")) {
+        if (user.getName().equals(searchValue)) {
+          result.add(user);
+        }
+      } else if (searchKey.equals("last")) {
+        if (user.getLastName().equals(searchValue)) {
+          result.add(user);
+        }
+      } else if (searchKey.equals("ID")) {
+        if (user.getNationalID().equals(searchValue)) {
+          result.add(user);
+        }
+      } else if (searchKey.equals("phone")) {
+        if (user.getPhoneNumber().equals(searchValue)) {
+          result.add(user);
+        }
+      } else if (searchKey.equals("address")) {
+        if (user.getAddress().equals(searchValue)) {
+          result.add(user);
+        }
+      } else if (searchKey.equals("userType")) {
+        if (user.getUserType().equals(UserType.valueOf(searchValue))) {
+          result.add(user);
+        }
+      }
+    }
+    return result;
+  }
+
+  public List<House> searchHouse(String searchKey, String searchValue) {
+    List<House> result = new ArrayList<House>();
+
+    for (User user : users) {
+      for (House house : user.getHouses()) {
+        if (searchKey.equals("id")) {
+          if (house.getId() == Integer.parseInt(searchValue)) {
+            result.add(house);
+          }
+        } else if (searchKey.equals("price")) {
+          if (house.getPrice() == Integer.parseInt(searchValue)) {
+            result.add(house);
+          }
+        } else if (searchKey.equals("area")) {
+          if (house.getArea() == Float.parseFloat(searchValue)) {
+            result.add(house);
+          }
+        } else if (searchKey.equals("address")) {
+          if (house.getAddress().equals(searchValue)) {
+            result.add(house);
+          }
+        } else if (searchKey.equals("rooms")) {
+          if (house.getNumberOfRooms() == Integer.parseInt(searchValue)) {
+            result.add(house);
+          }
+        } else if (searchKey.equals("parking")) {
+          if (house.hasParking() == Boolean.parseBoolean(searchValue)) {
+            result.add(house);
+          }
+        } else if (searchKey.equals("construction")) {
+          if (house.getYearOfConstruction() == Integer.parseInt(searchValue)) {
+            result.add(house);
+          }
+        }
+      }
+    }
+    return result;
   }
 }
 
@@ -310,6 +396,9 @@ class CommandDispatcher {
       case ADD_USER:
         this.addUser(command.getArguments());
         break;
+      case REMOVE_USER:
+        this.removeUser(command.getArguments());
+        break;
       case ADD_HOUSE:
         this.addHouse(command.getArguments());
         break;
@@ -325,6 +414,15 @@ class CommandDispatcher {
       case REPORT:
         this.report();
         break;
+      case PURCHASE:
+        this.purchase(command.getArguments());
+        break;
+      case SEARCH_HOUSE:
+        this.searchHouse(command.getArguments());
+        break;
+      case SEARCH_USER:
+        this.searchUser(command.getArguments());
+        break;
       default:
         System.out.println("\033[31m" + "Command not found" + "\033[0m");
         break;
@@ -334,22 +432,26 @@ class CommandDispatcher {
   private void help() {
     System.out.println("\033[32m" + "Available commands:" + "\033[0m");
     System.out.println("\033[32m" + "  help" + "\033[0m");
-
-    // ADD_USER <user> <user type> <name> <last name> <national ID> <phone number> <address> <!salary>
-    // ADD_HOUSE <user> <owner name> <owner last> <price> <area> <address> <number of rooms> <has parking> <year of construction>
-    // REMOVE_HOUSE <user> <owner name> <owner last> <house ID>
-    // LIST_USERS
-    // OPTIONS <name> <last name>
-
     System.out.println(
-        "\033[32m" + "  add user <user> <user type> <name> <last name> <national ID> <phone number> <address> <!salary>"
+        "\033[32m"
+            + "  add user <user> <user type> <name> <last name> <national ID> <phone number> <address> <!salary>"
             + "\033[0m");
+    System.out.println(
+        "\033[32m" + "  remove user <user> <name> <last name>" + "\033[0m");
     System.out.println("\033[32m"
         + "  add house <user> <owner name> <owner last> <price> <area> <address> <number of rooms> <has parking> <year of construction>"
+        + "\033[0m");
+    System.out.println("\033[32m" + "  purchase <user> <owner name> <owner last> <house ID> <buyer name> <buyer last>"
         + "\033[0m");
     System.out.println("\033[32m" + "  remove house <user> <owner name> <owner last> <house ID>" + "\033[0m");
     System.out.println("\033[32m" + "  list users" + "\033[0m");
     System.out.println("\033[32m" + "  options <name> <last name>" + "\033[0m");
+    System.out.println("\033[32m" + "  search house <user> <search key> <search value>" + "\033[0m");
+    System.out.println("\033[32m"
+        + "     * search keys: <!ID> <!price> <!area> <!address> <!rooms> <!parking> <!construction>" + "\033[0m");
+    System.out.println("\033[32m" + "  search user <user> <search key> <search value>" + "\033[0m");
+    System.out
+        .println("\033[32m" + "     * search keys: <!ID> <!name> <!last> <!phone> <!address> <!userType>" + "\033[0m");
   }
 
   // ADD_USER <user> <user type> <name> <last name> <national ID> <phone number> <address> <!salary>
@@ -379,6 +481,28 @@ class CommandDispatcher {
         break;
     }
     System.out.println("\033[32m" + "User added" + "\033[0m");
+  }
+
+  private void removeUser(String[] arguments) {
+    String user = arguments[1];
+
+    // Only the "ROOT" user can remove users.
+    if (!user.equals("ROOT")) {
+      System.out.println("\033[31m" + "This user is not allowed to remove users" + "\033[0m");
+      return;
+    }
+
+    String name = arguments[2];
+    String lastName = arguments[3];
+
+    User userToRemove = this.storage.getUser(name, lastName);
+    if (userToRemove == null) {
+      System.out.println("\033[31m" + "User not found" + "\033[0m");
+      return;
+    }
+
+    this.storage.removeUser(userToRemove.getNationalID());
+    System.out.println("\033[32m" + "User removed" + "\033[0m");
   }
 
   // ADD_HOUSE <user> <owner name> <owner last> <price> <area> <address> <number of rooms> <has parking> <year of construction>
@@ -415,6 +539,59 @@ class CommandDispatcher {
     }
   }
 
+  // SEARCH_HOUSE <user> [search key] [search value]
+  // search keys: <!ID> <!price> <!area> <!address> <!number of rooms> <!has parking> <!year of construction>
+  private void searchHouse(String[] arguments) {
+    String user = arguments[1];
+
+    // Only the "ROOT" user can search houses.
+    if (!user.equals("ROOT")) {
+      System.out.println("\033[31m" + "This user is not allowed to search houses" + "\033[0m");
+      return;
+    }
+
+    String searchKey = arguments[2];
+    String searchValue = arguments[3];
+
+    List<House> houses = this.storage.searchHouse(searchKey, searchValue);
+    if (houses.isEmpty()) {
+      System.out.println("\033[31m" + "No houses found" + "\033[0m");
+      return;
+    }
+
+    System.out.println("\033[32m" + "Houses:" + "\033[0m");
+    for (House house : houses) {
+      System.out.println("\033[32m" + "  " + house.toString() + "\033[0m");
+    }
+  }
+
+  // SEARCH_USER <user> [search key] [search value]
+  // search keys: <!ID> <!name> <!last> <!phone> <!address>
+  private void searchUser(String[] arguments) {
+    String user = arguments[1];
+
+    // Only the "ROOT" user can search users.
+    if (!user.equals("ROOT")) {
+      System.out.println("\033[31m" + "This user is not allowed to search users" + "\033[0m");
+      return;
+    }
+
+    String searchKey = arguments[2];
+    String searchValue = arguments[3];
+
+    List<User> users = this.storage.searchUser(searchKey, searchValue);
+
+    if (users.isEmpty()) {
+      System.out.println("\033[31m" + "No users found" + "\033[0m");
+      return;
+    }
+
+    System.out.println("\033[32m" + "Users:" + "\033[0m");
+    for (User _user : users) {
+      System.out.println("\033[32m" + "  " + _user.toString() + "\033[0m");
+    }
+  }
+
   // REMOVE_HOUSE <user> <owner name> <owner last> <house ID>
   private void removeHouse(String[] arguments) {
     String user = arguments[1];
@@ -441,6 +618,68 @@ class CommandDispatcher {
     System.out.println("\033[32m" + "House removed" + "\033[0m");
   }
 
+  private void purchase(String[] arguments) {
+    String user = arguments[1];
+
+    // Only the "ROOT" user can purchase houses.
+    if (!user.equals("ROOT")) {
+      System.out.println("\033[31m" + "This user is not allowed to purchase houses" + "\033[0m");
+      return;
+    }
+
+    User owner = this.storage.getUser(arguments[2], arguments[3]);
+    if (owner == null) {
+      System.out.println("\033[31m" + "Owner not found!" + "\033[0m");
+      return;
+    }
+
+    House house = owner.getHouse(Integer.parseInt(arguments[4]));
+
+    if (house == null) {
+      System.out.println("\033[31m" + "House not found!" + "\033[0m");
+      return;
+    }
+
+    User buyer = this.storage.getUser(arguments[5], arguments[6]);
+    if (buyer == null) {
+      System.out.println("\033[31m" + "Buyer not found!" + "\033[0m");
+      return;
+    }
+
+    // The buyer must have enough money to buy the house.
+    if (buyer.getSalary() < house.getPrice()) {
+      System.out.println("\033[31m" + "Buyer does not have enough money!" + "\033[0m");
+      return;
+    }
+
+    // The buyer must not be the owner of the house.
+    if (buyer.equals(house.getOwner())) {
+      System.out.println("\033[31m" + "Buyer is the owner of the house!" + "\033[0m");
+      return;
+    }
+
+    // The buyer must not be the owner of any other house.
+    if (buyer.getHouses() != null) {
+      for (House h : buyer.getHouses()) {
+        if (h.getOwner().equals(buyer)) {
+          System.out.println("\033[31m" + "Buyer is the owner of another house!" + "\033[0m");
+          return;
+        }
+      }
+    }
+
+    // Marks the house as sold.
+    house.changeOwner(buyer);
+
+    // Transfers the house to the buyer.
+    owner.removeHouse(house.getId());
+
+    buyer.addHouse(house);
+    buyer.setHasPurchasedHouse(true);
+
+    System.out.println("\033[32m" + "House purchased" + "\033[0m");
+  }
+
   // OPTIONS <name> <last name>
   private void options(String[] arguments) {
     User user = this.storage.getUser(arguments[1], arguments[2]);
@@ -457,7 +696,7 @@ class CommandDispatcher {
 
     System.out.println("\033[32m" + "Available Houses to Buy:" + "\033[0m");
     for (User seller : storage.getUsers()) {
-      if (seller.getUserType() == UserType.SELLER) {
+      if (seller.getUserType() == UserType.SELLER && seller.getHouses() != null) {
         for (House house : seller.getHouses()) {
           if (house.isPurchased() == false && house.getPrice() <= user.getSalary()) {
             System.out.println("\033[32m" + "  " + house.toString() + "\033[0m");
@@ -471,8 +710,19 @@ class CommandDispatcher {
     System.out.println("\033[32m" + "Report:" + "\033[0m");
     for (User user : storage.getUsers()) {
       System.out.println("\033[32m" + "  " + user.toString() + "\033[0m");
-      for (House house : user.getHouses()) {
-        System.out.println("\033[32m" + "    " + house.toString() + "\033[0m");
+      String userType = user.getUserType() == UserType.CUSTOMER ? "Customer" : "Seller";
+      System.out.println("\033[32m" + "    " + userType + "\033[0m");
+
+      if (user.getUserType() == UserType.ADMIN) {
+        continue;
+      }
+
+      // print houses if there are any
+      if (user.getHouses() != null) {
+        System.out.println("\033[32m" + "    Houses:" + "\033[0m");
+        for (House house : user.getHouses()) {
+          System.out.println("\033[32m" + "      " + house.toString() + "\033[0m");
+        }
       }
     }
   }
@@ -511,5 +761,12 @@ public class Application {
 /*                              Example Commands                              */
 /* -------------------------------------------------------------------------- */
 
-// ADD_USER ROOT SELLER Farhad Uneci 3861167190 09398466645 Hamedan, Mahdie
-// ADD_HOUSE ROOT Farhad Uneci 1000000 250 Hamedan 5 false 2000
+// add_user ROOT SELLER Fatemeh Moradi 386 939 Tehran
+// add_user ROOT CUSTOMER Asghar Farhadi 111 9999 Tehran 150000000
+// ADD_HOUSE ROOT Fatemeh Moradi 1000000 250 Tehran 5 false 2000
+// ADD_HOUSE ROOT Fatemeh Moradi 1000000 250 Tehran 5 false 2000
+// ADD_HOUSE ROOT Fatemeh Moradi 1000000 250 Tehran 5 false 2000
+// options Asghar Farhadi
+// purchase ROOT Fatemeh Moradi 1 Asghar Farhadi
+// list_users
+// report
